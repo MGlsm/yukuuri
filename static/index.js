@@ -18,6 +18,12 @@ let msg = Qmsg.loading("加载中")
 let currentWav = null
 let currentAudio = null
 let currentAudioUrl = ""
+let currentAudioBuffer = null
+let audioContext = null
+let webAudioSource = null
+let webAudioStartedAt = 0
+let webAudioOffset = 0
+let webAudioPlaying = false
 let aquestalk = null
 let convert = null
 
@@ -75,6 +81,9 @@ function resetAudio() {
     currentAudio.pause()
     currentAudio = null
   }
+  stopWebAudioPlayback()
+  currentAudioBuffer = null
+  webAudioOffset = 0
   if (currentAudioUrl) {
     URL.revokeObjectURL(currentAudioUrl)
     currentAudioUrl = ""
@@ -97,6 +106,83 @@ function setAudio(wav) {
   playToggle.disabled = false
   download.disabled = false
   downloadMp3.disabled = false
+}
+
+function stopWebAudioPlayback() {
+  if (webAudioSource) {
+    webAudioSource.onended = null
+    try {
+      webAudioSource.stop()
+    } catch(error) {
+      // Source may already be stopped.
+    }
+    webAudioSource = null
+  }
+  webAudioPlaying = false
+}
+
+function getAudioContext() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext
+  if (!AudioContextClass) {
+    throw new Error("当前浏览器不支持 Web Audio 播放")
+  }
+  if (!audioContext) {
+    audioContext = new AudioContextClass()
+  }
+  return audioContext
+}
+
+async function getCurrentAudioBuffer() {
+  if (currentAudioBuffer) {
+    return currentAudioBuffer
+  }
+  if (!currentWav) {
+    throw new Error("还没有生成音频")
+  }
+
+  const context = getAudioContext()
+  const wavCopy = currentWav.buffer.slice(
+    currentWav.byteOffset,
+    currentWav.byteOffset + currentWav.byteLength,
+  )
+  currentAudioBuffer = await context.decodeAudioData(wavCopy)
+  return currentAudioBuffer
+}
+
+async function playWithWebAudio() {
+  const context = getAudioContext()
+  if (context.state === "suspended") {
+    await context.resume()
+  }
+
+  const buffer = await getCurrentAudioBuffer()
+  stopWebAudioPlayback()
+
+  const source = context.createBufferSource()
+  source.buffer = buffer
+  source.connect(context.destination)
+  source.onended = () => {
+    if (webAudioPlaying) {
+      webAudioOffset = 0
+      webAudioPlaying = false
+      playToggle.textContent = "播放"
+    }
+    webAudioSource = null
+  }
+
+  webAudioStartedAt = context.currentTime - webAudioOffset
+  source.start(0, webAudioOffset)
+  webAudioSource = source
+  webAudioPlaying = true
+  playToggle.textContent = "暂停"
+}
+
+function pauseWebAudio() {
+  if (!webAudioPlaying) return
+  const context = getAudioContext()
+  webAudioOffset = Math.max(0, context.currentTime - webAudioStartedAt)
+  stopWebAudioPlayback()
+  playToggle.textContent = "播放"
 }
 
 function makeDownloadName(extension) {
@@ -243,17 +329,32 @@ async function generateSpeech() {
 generate.onclick = generateSpeech
 
 playToggle.onclick = async () => {
-  if (!currentAudio) return
-  if (currentAudio.paused) {
+  if (!currentWav) return
+
+  if (webAudioPlaying) {
+    pauseWebAudio()
+    return
+  }
+
+  if (currentAudio && !currentAudio.paused) {
+    currentAudio.pause()
+    playToggle.textContent = "播放"
+    return
+  }
+
+  if (currentAudio) {
     try {
       await currentAudio.play()
       playToggle.textContent = "暂停"
+      return
     } catch(error) {
-      setError(`播放失败：${error.message || error}`)
+      try {
+        await playWithWebAudio()
+        setWarning("当前浏览器不支持直接播放 WAV，已切换为兼容播放模式。")
+      } catch(fallbackError) {
+        setError(`播放失败：${fallbackError.message || fallbackError}`)
+      }
     }
-  } else {
-    currentAudio.pause()
-    playToggle.textContent = "播放"
   }
 }
 
