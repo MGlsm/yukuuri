@@ -3,59 +3,96 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-    <title>中文油库里 but Offline</title>
-    <meta name="description" content="中文油库里语音合成(离线版)">
-    <link href="https://storage.moegirl.org.cn/moegirl/commons/b/b3/%E4%B8%80%E8%B5%B7%E9%A6%92%E9%A6%92%E6%9D%A5%EF%BC%81.jpeg" rel="icon"/>
+    <title>自用中文油库里生成器</title>
+    <meta name="description" content="自用中文油库里语音生成工具">
+    <link rel="icon" href="data:,">
     <link rel="stylesheet" href="static/index.css">
-    <script src="https://cdn.jsdelivr.net/gh/creeperyang/pinyin/docs/browser.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/pinyin-to-kana@1.0.0/pinyinToKana.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/number-to-chinese-words@1.0.20/number-to-chinese-words.min.js"></script>
-    <script src="https://unpkg.com/wanakana"></script>
+    <script src="xlib/vendor/pinyin-browser.js"></script>
+    <script src="xlib/vendor/pinyinToKana.js"></script>
+    <script src="xlib/vendor/number-to-chinese-words.min.js"></script>
+    <script src="xlib/vendor/wanakana.js"></script>
+    <script src="static/converter-data.js"></script>
     <script src="xlib/converter/converter.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/encoding-japanese@2.2.0/encoding.min.js"></script>
+    <script src="xlib/vendor/jszip.min.js"></script>
+    <script src="xlib/vendor/lame.min.js"></script>
+    <script src="xlib/vendor/encoding.min.js"></script>
     <script src="xlib/unicorn-x86/unicorn-x86.min.js"></script>
-    <script src="https://fastly.jsdelivr.net/npm/qmsg@1.4.0/dist/index.umd.min.js"></script>
+    <script src="xlib/vendor/qmsg.min.js"></script>
+    <script src="static/f1-data.js"></script>
+    <script src="xlib/aquestalk/aquestalk.js"></script>
   </head>
   <body>
     <nav>
       <a class="brand">
-        <span>中文油库里 but OffLine</span>
+        <span>自用中文油库里生成器</span>
       </a>
       <input id="bmenub" type="checkbox" class="show">
       <label for="bmenub" class="burger pseudo button">☰</label>
-      <div class="menu">
-        <a href="/" class="pseudo button">主页</a>
-        <a href="https://github.com/Love-Kogasa/zh-yukumo-offline" class="button">Github</a>
-      </div>
+      <div class="menu"></div>
     </nav>
     
     <br>
 
-    <div class="container">
-      <img src="https://storage.moegirl.org.cn/moegirl/commons/e/e0/ASCII%E8%89%BA%E6%9C%AF%E5%93%81_%E7%81%B5%E6%A2%A6%E4%B8%8E%E9%AD%94%E7%90%86%E6%B2%99.png" />
-      <label for="input"><b>输入文字:</b></label>
-      <textarea id="input" placeholder="仅支持中文以及部分数字"></textarea>
-      <label for="filename"><b>下载的文件名(不用带后缀):</b></label>
-      <input type="text" id="filename" value="yukkuri">
-      <!-- aquestalk.js 未实现该功能
-        <label for="speed"><b>速度(<span id="speednumber">100%</span>):</b></label>
-        <input type="range" min="10" max="200" value="100" step="10" id="speed" />
-      -->
-      <br><br>
-      <button id="play">播放</button>
-      <button id="download">下载</button>
+    <main class="container app">
+      <section class="intro">
+        <h1>自用中文油库里生成器</h1>
+        <p>输入中文，一键转换成合成文本并生成 f1 油库里语音。</p>
+      </section>
+      <label for="input"><b>中文输入</b></label>
+      <textarea id="input" placeholder="请输入中文文本，例如：今天我们来玩塔防游戏，第一关路线要简单一点。"></textarea>
+
+      <div class="control-row">
+        <label for="speed"><b>语速 <span id="speednumber">100</span></b></label>
+        <input type="range" min="50" max="300" value="100" step="10" id="speed" />
+      </div>
+
+      <fieldset class="options">
+        <legend>预处理选项</legend>
+        <label class="toggle-option">
+          <span>自动删除空格</span>
+          <input type="checkbox" id="auto-remove-spaces" checked>
+          <span class="toggle-ui" aria-hidden="true"></span>
+          <span class="toggle-state" aria-hidden="true"><span class="on">开启</span><span class="off">关闭</span></span>
+        </label>
+        <label class="toggle-option">
+          <span>换行转句号</span>
+          <input type="checkbox" id="newline-to-period" checked>
+          <span class="toggle-ui" aria-hidden="true"></span>
+          <span class="toggle-state" aria-hidden="true"><span class="on">开启</span><span class="off">关闭</span></span>
+        </label>
+        <label class="toggle-option">
+          <span>中文标点转日语标点</span>
+          <input type="checkbox" id="punctuation-to-japanese" checked>
+          <span class="toggle-ui" aria-hidden="true"></span>
+          <span class="toggle-state" aria-hidden="true"><span class="on">开启</span><span class="off">关闭</span></span>
+        </label>
+        <label class="toggle-option">
+          <span>数字转中文</span>
+          <input type="checkbox" id="number-to-chinese" checked>
+          <span class="toggle-ui" aria-hidden="true"></span>
+          <span class="toggle-state" aria-hidden="true"><span class="on">开启</span><span class="off">关闭</span></span>
+        </label>
+      </fieldset>
+
+      <div class="actions">
+        <button id="generate">一键生成语音</button>
+        <button id="play" disabled>播放</button>
+        <button id="download" disabled>下载 WAV</button>
+        <button id="download-mp3" disabled>下载 MP3</button>
+        <button id="copy" class="pseudo">复制合成文本</button>
+      </div>
+
+      <label for="synth-text"><b>最终送入合成器的文本</b></label>
+      <textarea id="synth-text" placeholder="生成后会显示最终合成文本，也可以手动修改后重新生成。"></textarea>
+
+      <p id="warning" class="message warning" hidden></p>
+      <p id="error" class="message error" hidden></p>
+    </main>
+    
+    <div class="container note">
+      本工具为自用静态页面，只保留 f1 音声。合成核心基于 aquestalk.js，未改写合成核心。
     </div>
     
-    <div class="container">
-      一个运行在前端的油库里合成器。<br>
-      基于<a href="https://github.com/y52en/aquestalk.js">y52en/aquestalk.js</a>实现的语音生成<br>
-      如果是手机设备可能会慢很多，原因详见上述链接！<br>
-      不支持英文！但支持大部分中文(105错误表示不支持)
-      <br><br>
-      本页由 <a href="https://github.com/Love-Kogasa">Love-Kogasa</a> 编写
-    </div>
-    
-    <script src="static/index.js" type="module"></script>
+    <script src="static/index.js"></script>
   </body>
 </html>

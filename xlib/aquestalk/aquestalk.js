@@ -1,3 +1,4 @@
+(function () {
 // https://stackoverflow.com/questions/15761790/convert-a-32bit-integer-into-4-bytes-of-data-in-javascript/24947000
 function to_bytes_uint32(num) {
     return new Uint8Array([
@@ -228,7 +229,9 @@ _AquesTalk_dll_file = new WeakMap(), _AquesTalk_mu = new WeakMap(), _AquesTalk_h
 const uc = window.uc;
 async function loadAquesTalk(zippath, dllpath) {
     const zip = new JSZip();
-    const zipbin = await (await fetch(zippath)).arrayBuffer();
+    const zipbin = window.YUKUURI_F1_ZIP_BASE64
+        ? Uint8Array.from(atob(window.YUKUURI_F1_ZIP_BASE64), (char) => char.charCodeAt(0)).buffer
+        : await (await fetch(zippath)).arrayBuffer();
     const ziproot = await zip.loadAsync(zipbin);
     const dllfile = await ziproot.files[dllpath].async("arraybuffer");
     return new AquesTalk(dllfile, new uc.Unicorn(uc.ARCH_X86, uc.MODE_32));
@@ -241,4 +244,7 @@ async function play_wav(wav) {
   URL.revokeObjectURL(url);
 }
 
-export {loadAquesTalk, play_wav, AquesTalk}
+window.loadAquesTalk = loadAquesTalk;
+window.play_wav = play_wav;
+window.YukuuriAquesTalk = {loadAquesTalk, play_wav, AquesTalk};
+})();
