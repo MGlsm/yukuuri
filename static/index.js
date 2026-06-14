@@ -16,6 +16,7 @@ const numberToChinese = document.getElementById("number-to-chinese")
 
 let msg = Qmsg.loading("加载中")
 let currentWav = null
+let currentMp3Blob = null
 let currentAudio = null
 let currentAudioUrl = ""
 let currentAudioBuffer = null
@@ -77,6 +78,7 @@ function setWarning(message) {
 
 function resetAudio() {
   currentWav = null
+  currentMp3Blob = null
   if (currentAudio) {
     currentAudio.pause()
     currentAudio = null
@@ -91,17 +93,22 @@ function resetAudio() {
   playToggle.disabled = true
   download.disabled = true
   downloadMp3.disabled = true
-  playToggle.textContent = "播放"
+  playToggle.textContent = "播放 MP3"
 }
 
 function setAudio(wav) {
   resetAudio()
   currentWav = wav
-  const blob = new Blob([wav], { type: "audio/wav" })
-  currentAudioUrl = URL.createObjectURL(blob)
-  currentAudio = new Audio(currentAudioUrl)
-  currentAudio.onended = () => {
-    playToggle.textContent = "播放"
+  try {
+    currentMp3Blob = wavToMp3(wav)
+    currentAudioUrl = URL.createObjectURL(currentMp3Blob)
+    currentAudio = new Audio(currentAudioUrl)
+    currentAudio.preload = "auto"
+    currentAudio.onended = () => {
+      playToggle.textContent = "播放 MP3"
+    }
+  } catch(error) {
+    setWarning(`MP3 播放源生成失败，将使用 WAV 兼容播放：${error.message || error}`)
   }
   playToggle.disabled = false
   download.disabled = false
@@ -165,7 +172,7 @@ async function playWithWebAudio() {
     if (webAudioPlaying) {
       webAudioOffset = 0
       webAudioPlaying = false
-      playToggle.textContent = "播放"
+      playToggle.textContent = "播放 MP3"
     }
     webAudioSource = null
   }
@@ -182,7 +189,7 @@ function pauseWebAudio() {
   const context = getAudioContext()
   webAudioOffset = Math.max(0, context.currentTime - webAudioStartedAt)
   stopWebAudioPlayback()
-  playToggle.textContent = "播放"
+  playToggle.textContent = "播放 MP3"
 }
 
 function makeDownloadName(extension) {
@@ -338,7 +345,7 @@ playToggle.onclick = async () => {
 
   if (currentAudio && !currentAudio.paused) {
     currentAudio.pause()
-    playToggle.textContent = "播放"
+    playToggle.textContent = "播放 MP3"
     return
   }
 
@@ -350,7 +357,7 @@ playToggle.onclick = async () => {
     } catch(error) {
       try {
         await playWithWebAudio()
-        setWarning("当前浏览器不支持直接播放 WAV，已切换为兼容播放模式。")
+        setWarning("当前浏览器不支持 MP3 播放源，已切换为兼容播放模式。")
       } catch(fallbackError) {
         setError(`播放失败：${fallbackError.message || fallbackError}`)
       }
@@ -369,7 +376,7 @@ downloadMp3.onclick = () => {
   try {
     downloadMp3.disabled = true
     downloadMp3.textContent = "转换中..."
-    const blob = wavToMp3(currentWav)
+    const blob = currentMp3Blob || wavToMp3(currentWav)
     downloadBlob(blob, makeDownloadName("mp3"))
   } catch(error) {
     setError(`MP3 导出失败：${error.message || error}`)
