@@ -17,6 +17,7 @@ const numberToChinese = document.getElementById("number-to-chinese")
 let msg = Qmsg.loading("加载中")
 let currentWav = null
 let currentMp3Blob = null
+let currentPlaybackKind = ""
 let currentAudio = null
 let currentAudioUrl = ""
 let currentAudioBuffer = null
@@ -79,6 +80,7 @@ function setWarning(message) {
 function resetAudio() {
   currentWav = null
   currentMp3Blob = null
+  currentPlaybackKind = ""
   if (currentAudio) {
     currentAudio.pause()
     currentAudio = null
@@ -93,26 +95,54 @@ function resetAudio() {
   playToggle.disabled = true
   download.disabled = true
   downloadMp3.disabled = true
-  playToggle.textContent = "播放 MP3"
+  playToggle.textContent = "播放"
 }
 
 function setAudio(wav) {
   resetAudio()
   currentWav = wav
-  try {
-    currentMp3Blob = wavToMp3(wav)
-    currentAudioUrl = URL.createObjectURL(currentMp3Blob)
-    currentAudio = new Audio(currentAudioUrl)
-    currentAudio.preload = "auto"
-    currentAudio.onended = () => {
-      playToggle.textContent = "播放 MP3"
-    }
-  } catch(error) {
-    setWarning(`MP3 播放源生成失败，将使用 WAV 兼容播放：${error.message || error}`)
-  }
+  prepareHtmlAudio(new Blob([wav], { type: "audio/wav" }), "wav")
   playToggle.disabled = false
   download.disabled = false
   downloadMp3.disabled = false
+}
+
+function isMobileLike() {
+  return window.matchMedia("(pointer: coarse)").matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+}
+
+function prepareHtmlAudio(blob, kind) {
+  if (currentAudio) {
+    currentAudio.pause()
+    currentAudio = null
+  }
+  if (currentAudioUrl) {
+    URL.revokeObjectURL(currentAudioUrl)
+  }
+
+  currentPlaybackKind = kind
+  currentAudioUrl = URL.createObjectURL(blob)
+  currentAudio = new Audio()
+  currentAudio.preload = "auto"
+  currentAudio.src = currentAudioUrl
+  currentAudio.onended = () => {
+    playToggle.textContent = "播放"
+  }
+}
+
+function ensurePreferredAudioSource() {
+  if (!currentWav) return
+
+  if (isMobileLike()) {
+    if (!currentMp3Blob) {
+      currentMp3Blob = wavToMp3(currentWav)
+    }
+    if (currentPlaybackKind !== "mp3") {
+      prepareHtmlAudio(currentMp3Blob, "mp3")
+    }
+  } else if (currentPlaybackKind !== "wav") {
+    prepareHtmlAudio(new Blob([currentWav], { type: "audio/wav" }), "wav")
+  }
 }
 
 function stopWebAudioPlayback() {
@@ -172,7 +202,7 @@ async function playWithWebAudio() {
     if (webAudioPlaying) {
       webAudioOffset = 0
       webAudioPlaying = false
-      playToggle.textContent = "播放 MP3"
+      playToggle.textContent = "播放"
     }
     webAudioSource = null
   }
@@ -189,7 +219,7 @@ function pauseWebAudio() {
   const context = getAudioContext()
   webAudioOffset = Math.max(0, context.currentTime - webAudioStartedAt)
   stopWebAudioPlayback()
-  playToggle.textContent = "播放 MP3"
+  playToggle.textContent = "播放"
 }
 
 function makeDownloadName(extension) {
@@ -258,29 +288,61 @@ function parseWavPcm16(wav) {
   return { channels, sampleRate, samples }
 }
 
+function resampleChannel(channel, sourceRate, targetRate) {
+  if (sourceRate === targetRate) return channel
+
+  const ratio = sourceRate / targetRate
+  const outputLength = Math.max(1, Math.round(channel.length / ratio))
+  const output = new Int16Array(outputLength)
+
+  for (let i = 0; i < outputLength; i++) {
+    const sourceIndex = i * ratio
+    const leftIndex = Math.floor(sourceIndex)
+    const rightIndex = Math.min(leftIndex + 1, channel.length - 1)
+    const amount = sourceIndex - leftIndex
+    output[i] = Math.round(channel[leftIndex] * (1 - amount) + channel[rightIndex] * amount)
+  }
+
+  return output
+}
+
+function splitChannels(samples, channels) {
+  if (channels === 1) {
+    return [samples]
+  }
+
+  const left = new Int16Array(samples.length / 2)
+  const right = new Int16Array(samples.length / 2)
+  for (let i = 0, j = 0; i < samples.length; i += 2, j++) {
+    left[j] = samples[i]
+    right[j] = samples[i + 1]
+  }
+  return [left, right]
+}
+
 function wavToMp3(wav) {
   if (!window.lamejs) {
     throw new Error("MP3 编码器未加载")
   }
 
   const { channels, sampleRate, samples } = parseWavPcm16(wav)
-  const encoder = new lamejs.Mp3Encoder(channels, sampleRate, 128)
+  const targetSampleRate = sampleRate < 32000 ? 44100 : sampleRate
+  const pcmChannels = splitChannels(samples, channels).map(channel => (
+    resampleChannel(channel, sampleRate, targetSampleRate)
+  ))
+  const encoder = new lamejs.Mp3Encoder(channels, targetSampleRate, 128)
   const mp3Data = []
   const blockSize = 1152
 
   if (channels === 1) {
-    for (let i = 0; i < samples.length; i += blockSize) {
-      const chunk = samples.subarray(i, i + blockSize)
+    const [mono] = pcmChannels
+    for (let i = 0; i < mono.length; i += blockSize) {
+      const chunk = mono.subarray(i, i + blockSize)
       const buffer = encoder.encodeBuffer(chunk)
       if (buffer.length) mp3Data.push(buffer)
     }
   } else if (channels === 2) {
-    const left = new Int16Array(samples.length / 2)
-    const right = new Int16Array(samples.length / 2)
-    for (let i = 0, j = 0; i < samples.length; i += 2, j++) {
-      left[j] = samples[i]
-      right[j] = samples[i + 1]
-    }
+    const [left, right] = pcmChannels
     for (let i = 0; i < left.length; i += blockSize) {
       const leftChunk = left.subarray(i, i + blockSize)
       const rightChunk = right.subarray(i, i + blockSize)
@@ -345,22 +407,22 @@ playToggle.onclick = async () => {
 
   if (currentAudio && !currentAudio.paused) {
     currentAudio.pause()
-    playToggle.textContent = "播放 MP3"
+    playToggle.textContent = "播放"
     return
   }
 
-  if (currentAudio) {
+  try {
+    ensurePreferredAudioSource()
+    if (!currentAudio) {
+      throw new Error("播放源未准备好")
+    }
+    await currentAudio.play()
+    playToggle.textContent = "暂停"
+  } catch(error) {
     try {
-      await currentAudio.play()
-      playToggle.textContent = "暂停"
-      return
-    } catch(error) {
-      try {
-        await playWithWebAudio()
-        setWarning("当前浏览器不支持 MP3 播放源，已切换为兼容播放模式。")
-      } catch(fallbackError) {
-        setError(`播放失败：${fallbackError.message || fallbackError}`)
-      }
+      await playWithWebAudio()
+    } catch(fallbackError) {
+      setError(`播放失败：${fallbackError.message || fallbackError}`)
     }
   }
 }
