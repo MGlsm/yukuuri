@@ -228,13 +228,46 @@ function makeDownloadName(extension) {
   return `yukuuri_${timestamp}_${prefix || "audio"}.${extension}`
 }
 
-function downloadBlob(blob, filename) {
+function isAbortError(error) {
+  return error && (
+    error.name === "AbortError" ||
+    error.name === "NotAllowedError" ||
+    String(error.message || "").toLowerCase().includes("abort") ||
+    String(error.message || "").includes("取消")
+  )
+}
+
+async function saveBlob(blob, filename, title) {
+  if (window.File && navigator.canShare && navigator.share) {
+    const file = new File([blob], filename, { type: blob.type || "application/octet-stream" })
+    if (navigator.canShare({ files: [file] })) {
+      navigator.share({
+        files: [file],
+        title,
+        text: title,
+      }).catch(error => {
+        if (!isAbortError(error)) {
+          setWarning(`系统分享不可用，请用浏览器打开页面后重试：${error.message || error}`)
+        }
+      })
+      setWarning("已尝试打开系统分享面板；如果没有弹出，请用 Safari 或系统浏览器打开页面。")
+      return
+    }
+  }
+
   const url = URL.createObjectURL(blob)
   const a = document.createElement("a")
   a.download = filename
   a.href = url
+  a.rel = "noopener"
   a.click()
-  URL.revokeObjectURL(url)
+  setTimeout(() => URL.revokeObjectURL(url), 30000)
+}
+
+function downloadBlob(blob, filename, title) {
+  saveBlob(blob, filename, title).catch(error => {
+    setError(`保存失败：${error.message || error}`)
+  })
 }
 
 function parseWavPcm16(wav) {
@@ -427,24 +460,35 @@ playToggle.onclick = async () => {
   }
 }
 
-download.onclick = () => {
+download.onclick = async () => {
   if (!currentWav) return
   const blob = new Blob([currentWav], { type: "audio/wav" })
-  downloadBlob(blob, makeDownloadName("wav"))
+  download.disabled = true
+  download.textContent = "准备中..."
+  try {
+    await saveBlob(blob, makeDownloadName("wav"), "Yukuuri WAV 音频")
+  } catch(error) {
+    setError(`WAV 保存失败：${error.message || error}`)
+  } finally {
+    download.disabled = false
+    download.textContent = "保存/分享 WAV"
+  }
 }
 
-downloadMp3.onclick = () => {
+downloadMp3.onclick = async () => {
   if (!currentWav) return
   try {
     downloadMp3.disabled = true
     downloadMp3.textContent = "转换中..."
     const blob = currentMp3Blob || wavToMp3(currentWav)
-    downloadBlob(blob, makeDownloadName("mp3"))
+    currentMp3Blob = blob
+    downloadMp3.textContent = "保存中..."
+    await saveBlob(blob, makeDownloadName("mp3"), "Yukuuri MP3 音频")
   } catch(error) {
     setError(`MP3 导出失败：${error.message || error}`)
   } finally {
     downloadMp3.disabled = false
-    downloadMp3.textContent = "下载 MP3"
+    downloadMp3.textContent = "保存/分享 MP3"
   }
 }
 
