@@ -1,4 +1,4 @@
-class PinyinToKana {
+window.PinyinToKana = class PinyinToKana {
   constructor( mapping ) {
     this.#loadMap( mapping )
   }
@@ -18,7 +18,7 @@ class PinyinToKana {
 }
 
 if( typeof module === "object" )
-  module.exports = PinyinToKana
+  module.exports = window.PinyinToKana
 
 // console.log( new PinyinToKana( require( "fs" ).readFileSync("mapping.tsv").toString() ).pinyinToKana( "Ni hao，shi jie" ))
 // ニーハオ、シージエ

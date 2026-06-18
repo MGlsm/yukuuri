@@ -1,9 +1,13 @@
 var chineseNumber = window.index.NumberToChineseWords
 
 async function initConverter() {
+    var PinyinToKanaClass = window.PinyinToKana
+    if (!PinyinToKanaClass) {
+        throw new Error("拼音转假名模块加载失败")
+    }
     var converter = window.YUKUURI_CONVERTER_TSV
-        ? new PinyinToKana(window.YUKUURI_CONVERTER_TSV)
-        : await PinyinToKana.loadDict("static/converter.tsv")
+        ? new PinyinToKanaClass(window.YUKUURI_CONVERTER_TSV)
+        : await PinyinToKanaClass.loadDict("static/converter.tsv")
     return (string, options = {}) => {
         const { convertNumbers = true } = options
         if (convertNumbers) {
